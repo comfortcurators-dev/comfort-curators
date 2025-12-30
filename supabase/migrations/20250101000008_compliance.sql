@@ -8,7 +8,7 @@ CREATE TYPE dsar_status AS ENUM ('requested', 'in_review', 'completed', 'rejecte
 
 -- Consent logs
 CREATE TABLE consent_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   purpose TEXT NOT NULL, -- e.g., 'marketing', 'analytics'
@@ -22,7 +22,7 @@ CREATE INDEX idx_consent_logs_purpose ON consent_logs(purpose);
 
 -- DSAR (Data Subject Access Request) requests
 CREATE TABLE dsar_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   type dsar_type NOT NULL,
@@ -38,7 +38,7 @@ CREATE INDEX idx_dsar_requests_status ON dsar_requests(status);
 
 -- Audit logs
 CREATE TABLE audit_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   actor_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
@@ -58,7 +58,7 @@ CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- Notifications
 CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   type TEXT NOT NULL,

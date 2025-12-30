@@ -7,7 +7,7 @@ CREATE TYPE booking_status AS ENUM ('confirmed', 'cancelled');
 
 -- Properties table
 CREATE TABLE properties (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   owner_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -34,7 +34,7 @@ CREATE INDEX idx_properties_location ON properties USING GIST (
 
 -- Property photos
 CREATE TABLE property_photos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   storage_path TEXT NOT NULL,
@@ -45,7 +45,7 @@ CREATE INDEX idx_property_photos_property_id ON property_photos(property_id);
 
 -- Bookings from iCal sync
 CREATE TABLE bookings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   source TEXT NOT NULL DEFAULT 'airbnb_ical',

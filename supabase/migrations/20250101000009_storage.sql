@@ -16,7 +16,7 @@ CREATE POLICY "Property owners and admins can view photos"
     EXISTS (
       SELECT 1 FROM properties p
       JOIN org_members om ON om.org_id = p.org_id
-      WHERE storage.foldername(name)[1] = p.id::text
+      WHERE (storage.foldername(name))[1] = p.id::text
         AND om.user_id = auth.uid()
         AND (p.owner_user_id = auth.uid() OR om.role = 'org_admin')
         AND om.status = 'active'
@@ -30,7 +30,7 @@ CREATE POLICY "Property owners and admins can upload photos"
     EXISTS (
       SELECT 1 FROM properties p
       JOIN org_members om ON om.org_id = p.org_id
-      WHERE storage.foldername(name)[1] = p.id::text
+      WHERE (storage.foldername(name))[1] = p.id::text
         AND om.user_id = auth.uid()
         AND (p.owner_user_id = auth.uid() OR om.role = 'org_admin')
         AND om.status = 'active'
@@ -44,7 +44,7 @@ CREATE POLICY "Property owners and admins can delete photos"
     EXISTS (
       SELECT 1 FROM properties p
       JOIN org_members om ON om.org_id = p.org_id
-      WHERE storage.foldername(name)[1] = p.id::text
+      WHERE (storage.foldername(name))[1] = p.id::text
         AND om.user_id = auth.uid()
         AND (p.owner_user_id = auth.uid() OR om.role = 'org_admin')
         AND om.status = 'active'
@@ -59,7 +59,7 @@ CREATE POLICY "Ticket participants can view evidence"
     EXISTS (
       SELECT 1 FROM tickets t
       JOIN org_members om ON om.org_id = t.org_id
-      WHERE storage.foldername(name)[1] = t.id::text
+      WHERE (storage.foldername(name))[1] = t.id::text
         AND om.user_id = auth.uid()
         AND (t.created_by = auth.uid() OR t.assigned_to = auth.uid() OR om.role = 'org_admin')
         AND om.status = 'active'
@@ -72,7 +72,7 @@ CREATE POLICY "Assigned staff can upload evidence"
     bucket_id = 'ticket-evidence' AND
     EXISTS (
       SELECT 1 FROM tickets t
-      WHERE storage.foldername(name)[1] = t.id::text
+      WHERE (storage.foldername(name))[1] = t.id::text
         AND t.assigned_to = auth.uid()
     )
   );

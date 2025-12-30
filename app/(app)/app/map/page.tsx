@@ -26,29 +26,29 @@ export default function MapPage() {
     useEffect(() => {
         if (map.current || !mapContainer.current) return;
 
+        const tileUrl = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+        const attribution = process.env.NEXT_PUBLIC_MAP_ATTRIBUTION || "© OpenStreetMap contributors";
+
         // Initialize map centered on India
         map.current = new maplibregl.Map({
             container: mapContainer.current,
             style: {
                 version: 8,
                 sources: {
-                    osm: {
+                    "raster-tiles": {
                         type: "raster",
-                        tiles: [
-                            process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE ||
-                            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                        ],
+                        tiles: [tileUrl],
                         tileSize: 256,
-                        attribution:
-                            process.env.NEXT_PUBLIC_MAP_ATTRIBUTION ||
-                            "© OpenStreetMap contributors",
+                        attribution: attribution,
                     },
                 },
                 layers: [
                     {
-                        id: "osm",
+                        id: "simple-tiles",
                         type: "raster",
-                        source: "osm",
+                        source: "raster-tiles",
+                        minzoom: 0,
+                        maxzoom: 22,
                     },
                 ],
             },

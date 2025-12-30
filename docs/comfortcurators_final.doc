@@ -1,0 +1,307 @@
+
+Comfort Curators – Final Specification
+
+Non-Negotiable Output Rules
+---------------------------
+This document defines a binding contract for the AntiGravity code generation agent. It must be followed precisely to build a production‑grade Next.js 16 application called “Comfort Curators” without ambiguity.
+
+Output requirements:
+- Produce a complete, runnable repository with exact file paths and commands.
+- Implement all core flows end‑to‑end: authentication, multi‑tenant roles, map CRUD, iCal sync, ticketing, packages, bundles, inventory management, property health, billing, AI functionality, compliance tooling, and notifications.
+- Do not leave any core logic as TODO or incomplete; if an integration is optional, implement both a stub and a working local alternative.
+- No fake statistics or unverifiable claims; do not describe code as production‑ready unless implemented.
+- Write clean, formatted TypeScript; security‑first with strict Supabase RLS, least privilege, input validation, audit logs, and idempotency.
+- Ensure all AI actions are server‑side, human‑confirmed and gated by subscription.
+- Ensure local development works with commands: `supabase start`, `pnpm install`, `pnpm dev`, and provide seed data and basic e2e checks.
+- Provide a `/docs` directory with setup, deployment, compliance features, threat model and assumptions.
+
+Product Overview
+----------------
+Comfort Curators is a map‑first property management and operations platform for Airbnb hosts and operators in India. Users pin their properties on a map, sync bookings via iCal, manage packages and tickets, and monitor property health.
+
+Roles and tenancy:
+- Platform administrators (platform_admins) are members of a special table (`platform_admins(user_id)`) and have cross‑organisation access through server‑side APIs only.
+- Organisation administrators (org_admin) are defined in `org_members` and control everything within their organisation. They can manage users, staff, properties, bundles, inventory, subscriptions, invoices and compliance.
+- Users belong to `org_members` with role `user`; they own properties, bookings, packages and tickets for their organisation.
+- Staff belong to `org_members` with role `staff`; they execute tickets assigned or claimed to them and have minimal access required to do their tasks.
+- All business data is scoped to an `org_id`. A single auth user can belong to multiple organisations via `org_members` and selects an active organisation in the UI.
+- Warehouses and inventory are scoped to an organisation.
+- All membership rows have a status in (`active`, `invited`, `suspended`, `removed`). RLS checks always filter for status `active`.
+
+Routes and Navigation
+---------------------
+The application uses Next.js App Router. Route access is governed by role and organisation membership.
+
+Public routes:
+- / – marketing landing page
+- /login
+- /signup – user self‑signup only
+- /auth/callback
+
+User authenticated shell (prefixed with /app):
+- /app – redirects to /app/map
+- /app/map – map with property pins and search
+- /app/property/[id] – Notion‑like property page
+- /app/tickets – list, create and manage tickets
+- /app/bundles – private bundles
+- /app/packages – package templates and schedules
+- /app/settings – organisation settings, billing and compliance requests
+
+Staff authenticated shell (prefixed with /staff):
+- /staff – redirects to /staff/map
+- /staff/map – shows only assigned or unclaimed tickets depending on assignment mode
+- /staff/tickets/[id] – ticket execution view
+- /staff/picklist – pick list grouped by warehouse and route/day
+
+Organisation administrator shell (prefixed with /admin) – accessible to org_admin and platform_admin:
+- /admin – redirects to /admin/dashboard
+- /admin/users – manage users and staff in the organisation
+- /admin/properties – manage organisation properties
+- /admin/bundles – global and organisation bundles
+- /admin/inventory – SKUs, stock and bill ingestion
+- /admin/subscriptions – manage organisation subscriptions
+- /admin/invoices – view generated invoices
+- /admin/compliance – DSAR, consent logs, retention settings and audit logs
+
+Platform administrator shell (prefixed with /platform) – accessible only to platform_admins via server‑side APIs:
+- /platform/orgs – view and manage all organisations
+- /platform/audit – system‑wide audit and support tools
+- /platform/support – operational support tools
+
+Design System
+-------------
+Comfort Curators must adopt a Notion‑like aesthetic: calm, editorial typography; generous spacing; muted backgrounds; subtle borders and soft shadows.
+
+Essential design rules:
+- Use Tailwind CSS with CSS variables. Use shadcn/ui components based on Radix and lucide‑react icons.
+- Implement a collapsible sidebar layout with a top bar. Provide a command palette (⌘K) for navigation and search.
+- Property pages should read like Notion pages – flexible sections and blocks.
+- Implement dark mode with animated transitions. Use next‑themes for theme persistence. When supported, use the View Transitions API; otherwise fall back to CSS transitions on CSS variables.
+- Provide a tile‑based map with MapLibre GL (react‑map‑gl or maplibre‑gl). The tile provider URL is configurable via environment variable. The map canvas occupies the main view with a side sheet for property or ticket details.
+
+Data Model
+----------
+The backend uses Supabase (Postgres) with strict row‑level security. All tables are scoped by `org_id` except for platform_admins and auth.users. Below is the complete schema with final definitions and required additional tables. Fields are simplified for clarity; migration scripts must include appropriate primary keys, foreign keys, constraints and timestamps.
+
+Core identity / tenancy:
+- orgs(id uuid pk, name text, settings jsonb, created_at timestamptz)
+- org_members(org_id uuid fk, user_id uuid fk -> auth.users, role text CHECK IN ('org_admin','user','staff'), status text CHECK IN ('active','invited','suspended','removed') DEFAULT 'active', created_at timestamptz)
+- platform_admins(user_id uuid pk -> auth.users)
+- profiles(user_id uuid pk -> auth.users, full_name text, phone text, created_at timestamptz)
+- staff_profiles(user_id uuid pk -> auth.users, org_id uuid fk, skills text[], home_warehouse_id uuid fk nullable, created_at timestamptz)
+
+Properties:
+- properties(id uuid pk, org_id uuid fk, owner_user_id uuid fk -> auth.users, name text, address text, lat double precision, lng double precision, timezone text DEFAULT 'Asia/Kolkata', service_warehouse_id uuid fk -> warehouses nullable, turnover_package_id uuid fk -> packages nullable, access_notes text DEFAULT '', entry_method text CHECK IN ('keypad','keybox','doorman','host_meet','other') DEFAULT 'other', entry_details_encrypted text nullable, emergency_contact jsonb DEFAULT '{}', ical_url_encrypted text nullable, ical_meta jsonb, created_at timestamptz)
+- property_photos(id uuid pk, org_id uuid fk, property_id uuid fk, storage_path text, created_at timestamptz)
+
+Bookings:
+- bookings(id uuid pk, org_id uuid fk, property_id uuid fk, source text DEFAULT 'airbnb_ical', uid text, start_at timestamptz, end_at timestamptz, status text CHECK IN ('confirmed','cancelled') DEFAULT 'confirmed', last_modified timestamptz nullable, sequence integer nullable, raw_hash text, raw_payload jsonb, created_at timestamptz)
+
+Bundles and packages:
+- bundles(id uuid pk, org_id uuid fk, scope text CHECK IN ('admin_global','user_private'), owner_user_id uuid fk nullable, name text, description text, items jsonb NOT NULL, created_at timestamptz)
+- packages(id uuid pk, org_id uuid fk, property_id uuid fk nullable, name text, description text, trigger_type text CHECK IN ('booking_end','daily','weekly','custom'), trigger_rules jsonb NOT NULL including 'ticket_type', bundle_ids uuid[] DEFAULT '{}', checklist jsonb DEFAULT '[]', created_at timestamptz)
+
+Package runs:
+- package_runs(id uuid pk, org_id uuid fk, property_id uuid fk, package_id uuid fk, trigger_type text, trigger_ref text, status text CHECK IN ('created','ticket_created','skipped') DEFAULT 'created', created_at timestamptz, UNIQUE(property_id, package_id, trigger_type, trigger_ref))
+
+Tickets and items:
+- tickets(id uuid pk, org_id uuid fk, property_id uuid fk, created_by uuid fk -> auth.users, assigned_to uuid fk -> auth.users nullable, title text, description text, type text CHECK IN ('turnover_cleaning','routine_cleaning','restock','maintenance','inspection','custom'), tags text[] DEFAULT '{}', priority text CHECK IN ('low','medium','high','urgent') DEFAULT 'medium', due_at timestamptz nullable, status text CHECK IN ('created','assigned','accepted','in_progress','completed','cancelled') DEFAULT 'created', bundles_applied uuid[] DEFAULT '{}', checklist jsonb DEFAULT '[]', created_at timestamptz, updated_at timestamptz, archived_at timestamptz nullable)
+- ticket_item_lines(id uuid pk, org_id uuid fk, ticket_id uuid fk, warehouse_id uuid fk nullable, sku_id uuid fk, unit text, qty_required numeric, qty_reserved numeric DEFAULT 0, qty_picked numeric DEFAULT 0, qty_used numeric DEFAULT 0, qty_returned numeric DEFAULT 0, status text CHECK IN ('needed','shortage','reserved','picked','consumed','returned') DEFAULT 'needed', created_at timestamptz)
+- ticket_events(id uuid pk, org_id uuid fk, ticket_id uuid fk, actor_id uuid fk -> auth.users, event_type text, payload jsonb, created_at timestamptz)
+- ticket_evidence(id uuid pk, org_id uuid fk, ticket_id uuid fk, uploaded_by uuid fk -> auth.users, storage_path text, mime_type text, created_at timestamptz)
+
+Warehouses and inventory:
+- warehouses(id uuid pk, org_id uuid fk, name text, address text, lat double precision, lng double precision, created_at timestamptz)
+- inventory_skus(id uuid pk, org_id uuid fk, sku_code text, name text, unit text, min_stock numeric DEFAULT 0, reorder_level numeric DEFAULT 0, created_at timestamptz, UNIQUE(org_id, sku_code))
+- warehouse_inventory(id uuid pk, org_id uuid fk, warehouse_id uuid fk, sku_id uuid fk, on_hand numeric DEFAULT 0, reserved numeric DEFAULT 0, updated_at timestamptz, UNIQUE(warehouse_id, sku_id))
+- inventory_transactions(id uuid pk, org_id uuid fk, warehouse_id uuid fk, sku_id uuid fk, type text CHECK IN ('stock_in','reserve','release','deduct','adjust'), qty numeric, reference_type text, reference_id uuid, metadata jsonb, created_at timestamptz)
+- item_substitution_requests(id uuid pk, org_id uuid fk, ticket_item_line_id uuid fk, proposed_sku_id uuid fk, proposed_qty numeric, reason text, status text CHECK IN ('requested','approved','rejected') DEFAULT 'requested', requested_by uuid fk -> auth.users, decided_by uuid fk -> auth.users nullable, created_at timestamptz, decided_at timestamptz)
+
+Property health and logs:
+- property_health(id uuid pk, org_id uuid fk, property_id uuid fk UNIQUE, health_score integer, dimensions jsonb, explanation jsonb, updated_at timestamptz)
+- health_events(id uuid pk, org_id uuid fk, property_id uuid fk, cause text, payload jsonb, created_at timestamptz)
+
+Billing and subscriptions:
+- subscriptions(id uuid pk, org_id uuid fk, user_id uuid fk -> auth.users, stripe_customer_id text, stripe_subscription_id text, plan text, status text, current_period_end timestamptz, created_at timestamptz)
+- invoices(id uuid pk, org_id uuid fk, user_id uuid fk -> auth.users, stripe_invoice_id text nullable, invoice_number text, financial_year text, gst_fields jsonb, amount numeric, currency text, status text, pdf_storage_path text nullable, created_at timestamptz)
+- invoice_counters(org_id uuid fk, financial_year text, last_seq integer, PRIMARY KEY(org_id, financial_year))
+
+Billing identities:
+- org_billing_profiles(org_id uuid pk, legal_name text, gstin text, address jsonb, state_code text, invoice_prefix text DEFAULT 'CC', created_at timestamptz, updated_at timestamptz)
+- user_billing_profiles(id uuid pk, org_id uuid fk, user_id uuid fk, legal_name text, gstin text nullable, address jsonb, place_of_supply_state_code text, created_at timestamptz, updated_at timestamptz)
+
+Compliance and auditing:
+- consent_logs(id uuid pk, org_id uuid fk, user_id uuid fk -> auth.users, purpose text, status text CHECK IN ('granted','revoked'), captured_at timestamptz)
+- dsar_requests(id uuid pk, org_id uuid fk, user_id uuid fk -> auth.users, type text CHECK IN ('export','delete'), status text CHECK IN ('requested','in_review','completed','rejected'), result_storage_path text nullable, created_at timestamptz, completed_at timestamptz)
+- audit_logs(id uuid pk, org_id uuid fk, actor_id uuid fk -> auth.users nullable, action text, entity text, entity_id uuid nullable, metadata jsonb, ip text, user_agent text, created_at timestamptz)
+- notifications(id uuid pk, org_id uuid fk, user_id uuid fk -> auth.users, type text, payload jsonb, read_at timestamptz nullable, created_at timestamptz)
+- cron_cursors(name text pk, cursor jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())
+
+Security and Row‑Level Security (RLS)
+-------------------------------------
+Every table must enforce RLS. Users can only access data for organisations where they have an active membership. Roles and RLS rules are defined as follows:
+- A membership row in org_members with status='active' grants access to org‑scoped data; otherwise no data is visible.
+- `org_admin` may read and write all data within their organisation but cannot access data for other organisations.
+- `user` may read and write properties, bookings, tickets, bundles, packages, package runs and inventory scoped to their organisation. They cannot view or edit staff profiles or other users’ private bundles.
+- `staff` may only read tickets assigned to them (or unassigned in staff_claim mode), see the minimal property info necessary to perform the ticket (name, address, lat/lng, access_notes, emergency_contact, and entry details within 48 hours of due_at). They may update ticket status and evidence. They cannot access bookings, finances or other sensitive data.
+- `platform_admins` are not subject to RLS when using server‑side admin APIs; they do not interact with the client UI directly.
+
+Storage buckets must have their own policies. Property photos are readable by the property owner and org_admin; staff can read them only if assigned. Ticket evidence is readable by ticket creator, assigned staff, org_admin and platform admin; uploads are allowed only by assigned staff; bills bucket is admin‑only; DSAR exports are accessible only to the requesting user and admin via signed URLs.
+
+Packages & Scheduling
+---------------------
+A package is a scheduled template that can automatically create tickets. Each package has a `trigger_type` and `trigger_rules` that include the ticket type. Triggers can be booking_end, daily, weekly or custom.
+
+Trigger details:
+- booking_end: trigger_rules contains {'ticket_type', 'create_offset_hours' (number), 'dedupe_strategy': 'per_booking'}. For each confirmed booking end time, if the current time is greater than or equal to (end_at - offset) a package run may create a ticket. The trigger_ref is 'booking:<booking_id>'. Ticket due_at defaults to booking end_at plus a buffer (default 2 hours, configurable).
+- daily: trigger_rules contains {'ticket_type', 'time_local': 'HH:MM'}. The trigger_ref is 'day:YYYY‑MM‑DD' computed in the property timezone.
+- weekly: trigger_rules contains {'ticket_type', 'weekday' (0–6 for Monday–Sunday), 'time_local': 'HH:MM'}. The trigger_ref is 'week:YYYY‑WW' (ISO week) computed in the property timezone.
+- custom: trigger_rules contains {'ticket_type','interval_days': integer ≥1, 'time_local': 'HH:MM', 'anchor_date': 'YYYY‑MM‑DD'}. The trigger_ref includes the anchor date and an occurrence index.
+
+Package runs are stored in `package_runs` with a unique key (property_id, package_id, trigger_type, trigger_ref). A package run may create exactly one ticket; repeated executions must be idempotent.
+
+Scheduling system: use Vercel Cron or Supabase cron to call secured endpoints `/api/cron/ical`, `/api/cron/packages` and `/api/cron/health`. Each endpoint processes a bounded batch of items using a cursor stored in `cron_cursors`. Cron endpoints are idempotent and safe to rerun. Suggested schedules: iCal sync hourly, package generation every 15 minutes after iCal, health recomputation hourly.
+
+iCal Booking Sync
+-----------------
+Each property may have one iCal URL. The URL must be stored encrypted using a symmetric key (ENCRYPTION_KEY) and never exposed to the client. Sync logic:
+- Fetch feeds with conditional requests using ETag and Last‑Modified headers to avoid unnecessary downloads.
+- Parse DTSTART, DTEND, UID, SEQUENCE, LAST‑MODIFIED and STATUS. Normalise times to UTC in the database; compute local times in the property’s timezone when generating tickets.
+- If UID exists, upsert by (property_id, source, uid); if UID is missing, attempt to match on (start_at, end_at) within the same property; otherwise insert a new row.
+- Do not delete bookings on cancellation; update status to 'cancelled'. Consider SEQUENCE and LAST‑MODIFIED for updates.
+- Late sync: if a booking is discovered after its end time but within the configurable `late_window_hours` (default 48 hours) and no turnover ticket exists, still generate the turnover ticket.
+
+Tickets & Inventory
+-------------------
+Tickets capture work to be performed at a property. They belong to an organisation and property and include: title, description, type, priority, due date, checklist, applied bundles and status. Ticket fields must not be inferred by AI except through user confirmation.
+
+Ticket types:
+- turnover_cleaning – cleaning after a guest checks out
+- routine_cleaning – periodic cleaning not tied to a booking
+- restock – replenishing consumables and supplies
+- maintenance – repair or maintenance work
+- inspection – property inspection tasks
+- custom – any other job defined by the user
+
+Tickets may be created manually, by package runs or via AI proposals. Assignment models: the organisation chooses either `user_assign` (tickets must be assigned explicitly; staff do not see unassigned tickets) or `staff_claim` (unassigned tickets are visible to staff and may be claimed). Changing assignment mode is done in org settings; RLS policies enforce access accordingly.
+
+Lifecycle: tickets progress through statuses (created → assigned → accepted → in_progress → completed or cancelled). Completed tickets are immutable except for admin notes; evidence uploads are allowed within a configurable window (default seven days). Archiving sets `tickets.archived_at` and hides the ticket from default queries but retains the data for audits.
+
+Inventory reservation and consumption: each ticket has item lines specifying required SKUs and quantities. Reservation occurs when a ticket is assigned (or claimed) – the system reserves up to the available quantity from the assigned warehouse (`service_warehouse_id` on the property or staff’s home warehouse or default org warehouse). The reservation updates `warehouse_inventory.reserved` and creates `inventory_transactions` of type 'reserve'. Shortages mark line status 'shortage'. Staff pick lists show reserved items; staff record `qty_picked`. On completion, staff enter `qty_used` and return unused quantities. The system deducts used quantities (transaction 'deduct'), releases unused reservations (transaction 'release') and adjusts `warehouse_inventory.on_hand` and `reserved` accordingly. All reservation, release and deduction must run in database transactions to prevent negative stock; use check constraints and advisory locks where appropriate.
+
+Substitutions: if an item shortage occurs, staff may request a substitution through `item_substitution_requests`. The request includes proposed SKU, quantity and reason. Only the ticket creator (user) or an org_admin may approve or reject the substitution. On approval the ticket item lines are updated and reservations are attempted for the substitute. All changes are logged in `ticket_events`.
+
+Evidence: ticket evidence files are stored in a dedicated bucket. `ticket_evidence` records metadata including the uploader and mime type. Access rules mirror ticket access.
+
+Property Health
+---------------
+Property health is a computed score from 0 to 100 with four weighted dimensions: cleanliness readiness (0.35), consumables/restock readiness (0.25), maintenance risk (0.25) and ticket debt/SLA risk (0.15). Each dimension is computed deterministically based on bookings, ticket history and inventory state over the next seven days. Health is cached in `property_health` and recomputed whenever bookings change, tickets change status, inventory changes or packages run. A `health_events` log records each recomputation with cause and summary.
+
+Dimension computation:
+- Cleanliness readiness: if there is a confirmed booking ending within seven days, a completed turnover_cleaning ticket is expected after the last booking end. Score decays as the next checkout approaches without a completed turnover; if no bookings are scheduled the score decays slowly based on time since the last cleaning ticket.
+- Consumables/restock readiness: compute the effective turnover package (property.turnover_package_id fallback orgs.settings.default_turnover_package_id) whose `ticket_type` must be 'turnover_cleaning'. Calculate required SKUs for the next scheduled turnovers and compare to available inventory (on_hand - reserved). Shortages reduce the score proportionally. If turnover package is missing, consumables readiness defaults to 100 but notes 'Turnover package not configured'. If turnover package type is misconfigured (not turnover_cleaning), consumables readiness is set to 100 with explanation 'Turnover package misconfigured'.
+- Maintenance risk: open maintenance and inspection tickets reduce the score; repeated maintenance events in the past month further reduce it.
+- Ticket debt/SLA risk: overdue tickets weighted by priority reduce the score. SLA windows per priority are configurable (for example: low 72h, medium 48h, high 24h, urgent 12h).
+
+The health system must produce an explanation JSON listing each dimension’s score and the top three contributing reasons (ticket IDs, booking IDs or SKU shortages).
+
+AI Integrations
+---------------
+The system integrates Gemini 2.5 Flash for two flows: smart ticket proposals and bill parsing. AI calls are server‑side only, gated by subscription and always require user confirmation. Use two API keys (`GEMINI_KEY_A`, `GEMINI_KEY_B`) with a rotation and circuit‑breaker mechanism: round‑robin across keys and cool down a key after repeated failures. Log key usage without storing secrets.
+
+Smart subscription gating:
+Only organisations subscribed to the 'smart' plan may use AI ticket proposals. Subscriptions are stored in the `subscriptions` table and updated via Stripe webhooks.
+
+AI ticket proposal flow:
+- Users send a natural‑language message describing required work for a property. If Smart Subscription is active, the server (Edge Function) sends a prompt to Gemini providing context: property details, next booking end time and ID, a list of top 20 recently used SKUs and top 10 bundles in the organisation, plus search results for nouns extracted from the message.
+- Gemini must respond with STRICT JSON containing: title, description, priority (low|medium|high|urgent), due_at (ISO), checklist array, bundle_ids list, custom_items (array of {sku_id, qty}), and questions_for_user array. AI may only select bundle_ids and sku_ids present in the provided context. If it cannot decide on an item, it must list a question asking the user to choose or confirm.
+- The frontend displays a diff‑like preview of the proposed ticket. The user must explicitly confirm before the ticket is created. Without confirmation, no ticket is written. Schema validation using Zod rejects invalid AI output.
+
+Bill parsing flow:
+- Admin or warehouse user uploads an image of a bill (jpg/jpeg/png/webp). PDF files are rejected for MVP and users are asked to provide images.
+- The server fetches the image from Supabase Storage and calls Gemini to extract structured data: vendor, invoice number, date and line items (name, quantity, unit, rate, tax, total).
+- The server then matches each line item to existing SKUs using fuzzy matching. If no match is found, it proposes creating a new SKU.
+- The UI displays a review screen showing extracted items and proposed SKU matches. Admin can adjust quantities, assign new SKUs or reject the line. On confirmation, the system creates new SKUs if needed and records stock_in transactions to update `warehouse_inventory.on_hand` and create appropriate entries in `inventory_transactions`.
+
+Stripe Billing & Invoicing
+--------------------------
+Use Stripe for subscription management and invoicing. Plans include 'basic' (no AI) and 'smart' (includes AI features). Implement:
+- Stripe Customer and Subscription objects per organisation; store IDs in `subscriptions`.
+- Webhook handler to update subscription statuses, current_period_end and plan. Gating logic uses the status field (e.g., active, past_due).
+- Invoice generation: when a Stripe invoice is finalised (subscription or additional charges), create an `invoices` record with a sequential invoice_number. Use the Indian financial year (April 1 – March 31) and generate invoice numbers using `invoice_counters` table and a DB transaction with advisory lock to avoid race conditions.
+- Invoice number format: '{invoice_prefix}/{financial_year}/{seq_padded_5}' where invoice_prefix comes from org_billing_profiles. Example: 'CC/FY2025-2026/00042'.
+- Store supplier fields (GSTIN, legal name, address) in `org_billing_profiles` and customer fields in `user_billing_profiles`. Snapshot these fields into `invoices.gst_fields` when generating the invoice to ensure reproducibility.
+- Generate PDF invoices in the required Indian GST format and store in Supabase Storage. Provide CSV/JSON exports for accountants.
+
+Subscriptions use Stripe webhooks to update statuses. If a subscription is cancelled, downgrade the organisation’s plan and disable AI functionality immediately.
+
+Compliance Centre
+-----------------
+The application must help organisations comply with Indian data protection and GST regulations. Features include:
+- Retention settings: per‑organisation configuration of retention_days for ticket evidence, audit logs and completed tickets. Retained data older than the configured retention period is soft‑deleted by scheduled jobs.
+- DSAR requests: users may request export or deletion of their personal data via /app/settings. Requests are stored in `dsar_requests`, and org_admin can review and fulfil them in /admin/compliance. Exports generate a zip of JSON/CSV and store it in a secure bucket; deletion anonymises user data but retains necessary records for legal or financial reasons.
+- Consent logs: record user consent for purposes such as marketing. Users can grant or revoke consent via settings.
+- Audit logs: record all sensitive actions including role changes, deletions, exports, inventory adjustments, invoice generation and AI confirmations. Include actor, action, entity, metadata, IP and user agent.
+- Notifications: use the `notifications` table to inform users and staff about ticket assignments, completions, shortages, subscription changes and DSAR updates. Provide an in‑app bell icon; sending email notifications is optional.
+
+Cron Endpoints & Batch Processing
+---------------------------------
+Implement batched cron endpoints to avoid timeouts on Vercel. Each endpoint must check an `x-cron-secret` header equal to CRON_SECRET, process a bounded number of records and update a cursor in `cron_cursors`. Endpoints:
+- /api/cron/ical – hourly: sync bookings for a subset of properties based on cursor.
+- /api/cron/packages – every 15 minutes: process package runs after booking sync, generating tickets.
+- /api/cron/health – hourly: recompute property health for properties that changed or have upcoming bookings.
+
+Environment Variables
+---------------------
+Create an `.env.example` with the following keys. Provide documentation on how to obtain or generate each secret.
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE
+- NEXT_PUBLIC_MAP_ATTRIBUTION
+- CRON_SECRET
+- STRIPE_SECRET_KEY
+- STRIPE_WEBHOOK_SECRET
+- NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+- GEMINI_KEY_A
+- GEMINI_KEY_B
+- AI_MODEL_NAME=gemini-2.5-flash
+- ENCRYPTION_KEY
+- NEXT_PUBLIC_APP_NAME=Comfort Curators
+
+Deliverables
+------------
+The agent must generate the following artefacts:
+- Complete Next.js repository with App Router code and typed Supabase client.
+- Database migrations implementing the schema above and seed scripts creating one organisation, one org_admin, one user, one staff, one warehouse with SKUs, one property with a placeholder iCal URL (encrypted), one bundle, one package and one ticket.
+- Supabase RLS policies for every table and storage bucket policies.
+- Edge Functions implementing: ai‑ticket‑proposal, ai‑bill‑parse, ical‑sync, health‑recompute (or integrated API routes), plus cron endpoints.
+- Stripe webhook handler and subscription gating logic.
+- Admin and user UIs with pages defined above.
+- Documentation in /docs covering setup, deployment, security (threat model and RLS), compliance tooling, assumptions and usage instructions.
+
+Implementation Plan
+-------------------
+Recommended build order to ensure logical staging of features and incremental testing. Each step should be committed with complete implementation before moving on.
+1. Scaffold the Next.js application, implement the Notion‑inspired theme, dark mode transition and authentication shell with organisation selection and role‑based shells.
+2. Define database schema and migrations, configure Supabase RLS, create typed client utilities and seed initial data.
+3. Implement map view with property CRUD (create by dropping a pin or searching address) and property detail sheet.
+4. Implement iCal sync and bookings UI, including cron batching and late‑booking logic.
+5. Implement bundles, packages and package runs with scheduling logic and idempotent ticket generation.
+6. Implement ticket creation, assignment/claim flows, staff execution UI, checklist updates, evidence uploads and item lines reservation.
+7. Implement inventory management: SKU CRUD, warehouse inventory, reservation/deduct flows, pick lists and substitution requests.
+8. Implement property health model and UI breakdown with explanations and event logging.
+9. Implement Stripe subscriptions, invoice generation with GST fields, invoice numbering via invoice_counters and PDF export.
+10. Implement AI ticket proposal and bill parsing flows with Smart Subscription gating, key rotation and schema validation.
+11. Implement admin dashboards and compliance centre, including DSAR request handling, consent logs, retention settings and audit logs. Implement notifications.
+12. Perform hardening, add unit tests for health calculation and iCal parsing, integration tests for RLS, and finalise documentation.
+
+Hard Overrides and Final Clarifications
+---------------------------------------
+The following overrides resolve any potential contradictions in this document. All earlier conflicting statements must be ignored in favour of these rules.
+- Roles: `org_members.role` accepts only ('org_admin','user','staff'); there is no 'admin' role. Platform administrators exist only in `platform_admins` and access server‑side admin APIs.
+- Routes: `/admin/*` is the organisation admin area accessible to org_admin and platform_admin. `/platform/*` is reserved for platform_admin operations across all organisations.
+- Trigger rules: every package’s `trigger_rules` MUST include a `ticket_type` field specifying one of the defined ticket types. Without this field package creation must fail.
+- Turnover package resolution: property.turnover_package_id overrides orgs.settings.default_turnover_package_id; the effective turnover package MUST have ticket_type 'turnover_cleaning'. If no turnover package is configured, consumables readiness = 100 with an explanation. If misconfigured, consumables readiness = 100 with explanation 'Turnover package misconfigured'.
+- Organisation onboarding: on user signup create a new organisation and set the user’s role to 'org_admin' with status 'active'. Staff accounts are created by org_admins or platform_admins via invitation; invitation sets status='invited', which becomes 'active' upon first login.
+- Explicitly remove all earlier references to role='admin'; replace with 'org_admin'.

@@ -2,8 +2,9 @@
 -- Core identity and tenancy tables
 
 -- Enable necessary extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; -- Replaced by gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- Enum types
 CREATE TYPE org_member_role AS ENUM ('org_admin', 'user', 'staff');
@@ -11,7 +12,7 @@ CREATE TYPE org_member_status AS ENUM ('active', 'invited', 'suspended', 'remove
 
 -- Organizations table
 CREATE TABLE orgs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   settings JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

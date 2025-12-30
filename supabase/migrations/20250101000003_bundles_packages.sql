@@ -8,7 +8,7 @@ CREATE TYPE package_run_status AS ENUM ('created', 'ticket_created', 'skipped');
 
 -- Bundles - reusable item collections
 CREATE TABLE bundles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   scope bundle_scope NOT NULL,
   owner_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -24,7 +24,7 @@ CREATE INDEX idx_bundles_owner_user_id ON bundles(owner_user_id);
 
 -- Packages - scheduled templates that create tickets
 CREATE TABLE packages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID REFERENCES properties(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -43,7 +43,7 @@ CREATE INDEX idx_packages_trigger_type ON packages(trigger_type);
 
 -- Package runs - tracks execution of packages
 CREATE TABLE package_runs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   package_id UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,

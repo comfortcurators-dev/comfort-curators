@@ -3,7 +3,7 @@
 
 -- Property health - cached scores
 CREATE TABLE property_health (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID NOT NULL UNIQUE REFERENCES properties(id) ON DELETE CASCADE,
   health_score INTEGER NOT NULL CHECK (health_score >= 0 AND health_score <= 100),
@@ -23,7 +23,7 @@ CREATE INDEX idx_property_health_score ON property_health(health_score);
 
 -- Health events - recomputation log
 CREATE TABLE health_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   cause TEXT NOT NULL, -- e.g., 'booking_sync', 'ticket_update', 'inventory_change', 'scheduled'

@@ -1,6 +1,4 @@
-[project]
-id = "comfort-curators"
-name = "Comfort Curators"
+
 
 [api]
 enabled = true

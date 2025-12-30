@@ -22,7 +22,7 @@ CREATE TYPE ticket_status AS ENUM (
 
 -- Tickets table
 CREATE TABLE tickets (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -51,7 +51,7 @@ CREATE INDEX idx_tickets_archived_at ON tickets(archived_at);
 
 -- Ticket events - activity log
 CREATE TABLE ticket_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
   actor_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -65,7 +65,7 @@ CREATE INDEX idx_ticket_events_created_at ON ticket_events(created_at);
 
 -- Ticket evidence - uploaded files
 CREATE TABLE ticket_evidence (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
   uploaded_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

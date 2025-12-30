@@ -21,7 +21,7 @@ CREATE TYPE substitution_status AS ENUM ('requested', 'approved', 'rejected');
 
 -- Warehouses
 CREATE TABLE warehouses (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   address TEXT NOT NULL,
@@ -44,7 +44,7 @@ ALTER TABLE properties
 
 -- Inventory SKUs
 CREATE TABLE inventory_skus (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   sku_code TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -59,7 +59,7 @@ CREATE INDEX idx_inventory_skus_org_id ON inventory_skus(org_id);
 
 -- Warehouse inventory - stock levels per warehouse
 CREATE TABLE warehouse_inventory (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
   sku_id UUID NOT NULL REFERENCES inventory_skus(id) ON DELETE CASCADE,
@@ -75,7 +75,7 @@ CREATE INDEX idx_warehouse_inventory_sku_id ON warehouse_inventory(sku_id);
 
 -- Inventory transactions - movement log
 CREATE TABLE inventory_transactions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
   sku_id UUID NOT NULL REFERENCES inventory_skus(id) ON DELETE CASCADE,
@@ -94,7 +94,7 @@ CREATE INDEX idx_inventory_transactions_created_at ON inventory_transactions(cre
 
 -- Ticket item lines - SKU requirements per ticket
 CREATE TABLE ticket_item_lines (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
   warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL,
@@ -115,7 +115,7 @@ CREATE INDEX idx_ticket_item_lines_status ON ticket_item_lines(status);
 
 -- Item substitution requests
 CREATE TABLE item_substitution_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   ticket_item_line_id UUID NOT NULL REFERENCES ticket_item_lines(id) ON DELETE CASCADE,
   proposed_sku_id UUID NOT NULL REFERENCES inventory_skus(id) ON DELETE CASCADE,
